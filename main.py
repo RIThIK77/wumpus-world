@@ -1,0 +1,142 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+class WumpusWorld:
+    def __init__(self, size=4):
+        self.size = size
+        self.board = np.zeros((size, size))
+        self.wumpus_pos = (0, 0)
+        self.gold_pos = (0, 0)
+        self.pit_pos = []
+        self.player_pos = (size-1, 0)
+        self.has_gold = False
+        self.is_alive = True
+        self.generate_world()
+
+    def generate_world(self):
+        # Place Wumpus
+        self.wumpus_pos = self.place_entity(exclude=[self.player_pos])
+
+        # Place Gold
+        self.gold_pos = self.place_entity(exclude=[self.player_pos, self.wumpus_pos])
+
+        # Place Pits
+        for _ in range(self.size // 2):
+            pit_pos = self.place_entity(exclude=[self.player_pos, self.wumpus_pos, self.gold_pos])
+            self.pit_pos.append(pit_pos)
+
+        # Set perceptions
+        self.set_perceptions()
+
+    def place_entity(self, exclude):
+        while True:
+            pos = (np.random.randint(self.size), np.random.randint(self.size))
+            if pos not in exclude:
+                return pos
+
+    def set_perceptions(self):
+        self.board.fill(0)
+        if self.wumpus_pos:
+            self.board[self.wumpus_pos] = 1  # Wumpus
+            self.set_adjacent(self.wumpus_pos, 3)  # Stench
+        if self.gold_pos:
+            self.board[self.gold_pos] = 2  # Gold
+        for pit in self.pit_pos:
+            self.board[pit] = -1  # Pit
+            self.set_adjacent(pit, 4)  # Breeze
+
+    def set_adjacent(self, pos, value):
+        x, y = pos
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < self.size and 0 <= ny < self.size:
+                if self.board[nx, ny] == 0:
+                    self.board[nx, ny] = value
+                elif self.board[nx, ny] != 2:
+                    self.board[nx, ny] = max(self.board[nx, ny], value)
+
+    def move_player(self, direction):
+        if not self.is_alive:
+            print("Game over! Restart to play again.")
+            return
+
+        x, y = self.player_pos
+        if direction == 'U' and x > 0:
+            self.player_pos = (x - 1, y)
+        elif direction == 'D' and x < self.size - 1:
+            self.player_pos = (x + 1, y)
+        elif direction == 'L' and y > 0:
+            self.player_pos = (x, y - 1)
+        elif direction == 'R' and y < self.size - 1:
+            self.player_pos = (x, y + 1)
+
+        self.check_position()
+
+    def check_position(self):
+        x, y = self.player_pos
+        if self.board[x, y] == 1:
+            print("You encountered the Wumpus! Game Over.")
+            self.is_alive = False
+        elif self.board[x, y] == -1:
+            print("You fell into a pit! Game Over.")
+            self.is_alive = False
+        elif self.player_pos == self.gold_pos:
+            print("You found the gold! You win!")
+            self.has_gold = True
+        else:
+            print(self.perceive())
+
+    def perceive(self):
+        x, y = self.player_pos
+        perceptions = []
+        if self.board[x, y] == 3:
+            perceptions.append("You smell a stench.")
+        if self.board[x, y] == 4:
+            perceptions.append("You feel a breeze.")
+        return " ".join(perceptions)
+
+def display_world(world, ax):
+    size = world.size
+    ax.clear()
+    for i in range(size):
+        for j in range(size):
+            rect = patches.Rectangle((j, size - 1 - i), 1, 1, linewidth=1, edgecolor='black', facecolor='white')
+            ax.add_patch(rect)
+            if world.board[i, j] == 1:
+                ax.text(j + 0.5, size - 1 - i + 0.5, 'W', ha='center', va='center', fontsize=20, color='red')
+            elif world.board[i, j] == 2:
+                ax.text(j + 0.5, size - 1 - i + 0.5, 'G', ha='center', va='center', fontsize=20, color='gold')
+            elif world.board[i, j] == -1:
+                ax.text(j + 0.5, size - 1 - i + 0.5, 'P', ha='center', va='center', fontsize=20, color='black')
+            elif world.board[i, j] == 3:
+                ax.text(j + 0.5, size - 1 - i + 0.5, 'S', ha='center', va='center', fontsize=20, color='gray')
+            elif world.board[i, j] == 4:
+                ax.text(j + 0.5, size - 1 - i + 0.5, 'B', ha='center', va='center', fontsize=20, color='blue')
+
+    player_x, player_y = world.player_pos
+    ax.plot(player_y + 0.5, size - 1 - player_x + 0.5, 'ro', markersize=20)
+    ax.set_xlim(0, size)
+    ax.set_ylim(0, size)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    plt.draw()
+
+def on_key(event, world, ax):
+    if event.key in ['up', 'down', 'left', 'right']:
+        if event.key == 'up':
+            world.move_player('U')
+        elif event.key == 'down':
+            world.move_player('D')
+        elif event.key == 'left':
+            world.move_player('L')
+        elif event.key == 'right':
+            world.move_player('R')
+        display_world(world, ax)
+
+if __name__ == "__main__":
+    world = WumpusWorld(size=4)
+    fig, ax = plt.subplots()
+    display_world(world, ax)
+    fig.canvas.mpl_connect('key_press_event', lambda event: on_key(event, world, ax))
+    plt.show()
